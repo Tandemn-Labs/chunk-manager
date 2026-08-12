@@ -10,7 +10,7 @@ The chunk manager coordinates chunks of a batched inference job across chains.
 It stores coordination metadata only. Chains read inputs and write outputs
 directly to object storage.
 
-PostgreSQL is the authority for jobs, job-chain associations, chunks, leases,
+PostgreSQL is the authority for jobs, chain associations, chunks, leases,
 retries, and committed outputs. API processes are stateless.
 
 ## 2. Terminology
@@ -24,29 +24,43 @@ A batched inference request and its chunks. Multiple chains may work on one job.
 The smallest independently leased and retried unit of a job. Its input is
 immutable.
 
+### Rank
+
+A group of chains with the same model and runtime configuration. A job may have
+multiple ranks. Job and rank IDs are ULIDs.
+
 ### Chain
 
 One complete instance of an LLM model, potentially distributed across multiple
 machines and GPUs. For example, Llama 70B deployed on two machines with four
 GPUs each using PP=2 and TP=4 is one chain.
 
-The chunk manager only checks whether a `chain_id` is associated with the job.
-It does not validate the chain's configuration.
+The placement hierarchy is:
 
-A chain ID identifies one chain lifecycle and is not reused after removal.
+```text
+job_id -> rank_id -> chain_id
+```
+
+`chain_id` is an integer scoped to its rank. The composite
+`(job_id, rank_id, chain_id)` uniquely identifies a chain. The chunk manager
+only checks whether this composite identity is associated with the job; it does
+not validate configuration.
+
+The composite chain identity identifies one lifecycle and is not reused after
+removal.
 
 ### Lease
 
 Time-bounded permission for a chain to process a chunk. The lease consists of:
 
 ```text
-(job_id, chunk_id, current_chain_id, lease_generation, lease_expires_at)
+(job_id, chunk_id, current_rank_id, current_chain_id, lease_generation, lease_expires_at)
 ```
 
 A lease is valid when:
 
 - The chunk is `LEASED`.
-- The chain and generation match the chunk row.
+- The rank, chain, and generation match the chunk row.
 - The job is `RUNNING`.
 - The chain association is `ACTIVE` or `DRAINING`.
 - Database time is earlier than `lease_expires_at`.
@@ -80,7 +94,8 @@ replacement starts. Only the current generation can commit.
 
 All state transitions are transactional. Database wall-clock time must be
 sampled after waiting for relevant locks. Operations lock records in this order:
-job, chain associations ordered by chain ID, then chunks ordered by chunk ID.
+job, chain associations ordered by `(rank_id, chain_id)`, then chunks ordered by
+chunk ID.
 After locking, operations recheck job state, both chain associations, chunk
 state, generation, and expiration. PostgreSQL `clock_timestamp()` is used for
 post-lock time checks.
@@ -101,11 +116,12 @@ Required fields:
 - Maximum retries and retry backoff policy
 - Input manifest reference
 
-### Job-chain association
+### Chain association
 
 Required fields:
 
 - `job_id`
+- `rank_id`
 - `chain_id`
 - State: `ACTIVE` or `DRAINING`
 
@@ -114,7 +130,7 @@ Required fields:
 | `ACTIVE` | Yes | Yes |
 | `DRAINING` | No | Yes |
 
-The database enforces uniqueness for `(job_id, chain_id)` and
+The database enforces uniqueness for `(job_id, rank_id, chain_id)` and
 `(job_id, chunk_id)`.
 
 ### Chunk
@@ -124,7 +140,7 @@ Required fields:
 - `job_id` and `chunk_id`
 - Input reference
 - State
-- Current chain ID when leased
+- Current rank and chain IDs when leased
 - Lease generation and expiration
 - Retry count and `not_before`
 - Committed output metadata
@@ -173,15 +189,15 @@ LEASED -> FAILED
 READY/LEASED -> CANCELLED
 ```
 
-When a chunk leaves `LEASED`, its current chain and expiration are cleared. Its
-lease generation is retained.
+When a chunk leaves `LEASED`, its current rank, chain, and expiration are
+cleared. Its lease generation is retained.
 
 ## 6. API Semantics
 
 ### Claim chunks
 
 ```text
-ClaimChunks(job_id, chain_id, max_chunks)
+ClaimChunks(job_id, rank_id, chain_id, max_chunks)
 ```
 
 One request may claim up to `max_chunks`. Chains must not request more chunks
@@ -215,6 +231,7 @@ This may delay work and consume retry budget, which is an accepted tradeoff.
 ```text
 RenewLeases(
   job_id,
+  rank_id,
   chain_id,
   leases: [{chunk_id, lease_generation}, ...]
 )
@@ -238,6 +255,7 @@ valid.
 ```text
 CompleteChunk(
   job_id,
+  rank_id,
   chain_id,
   chunk_id,
   lease_generation,
@@ -261,6 +279,7 @@ the existing success. This uses the chunk's terminal state, not a request record
 ```text
 FailChunk(
   job_id,
+  rank_id,
   chain_id,
   chunk_id,
   lease_generation,
