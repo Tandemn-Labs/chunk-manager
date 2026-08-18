@@ -49,6 +49,10 @@ func (store *Store) ClaimChunks(ctx context.Context, params ClaimChunksParams) (
 		targetKey := chainKey{rankID: params.RankID, chainID: params.ChainID}
 		associationKeys := []chainKey{targetKey}
 		chunkIDs := make([]int64, len(candidates))
+
+		// Collect chainKey(s) of the previous chains of the chunks in the list
+		// Only add it if there is a valid rank_id + chain_id
+		// If those fields are not there, the chunk can be in READY state without prev owner
 		for index, candidate := range candidates {
 			chunkIDs[index] = candidate.ChunkID
 			if key, ok := chainKeyFromLeaseFields(
@@ -76,6 +80,7 @@ func (store *Store) ClaimChunks(ctx context.Context, params ClaimChunksParams) (
 			return nil, ErrChainNotActive
 		}
 
+		// This section onwards actually locks and work on chunks
 		lockedChunks, err := queries.LockChunks(ctx, db.LockChunksParams{
 			JobID:    dbUUID(params.JobID),
 			ChunkIds: chunkIDs,

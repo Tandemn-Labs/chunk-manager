@@ -87,10 +87,14 @@ func withTransaction[T any](
 	if err != nil {
 		return result, fmt.Errorf("begin transaction: %w", err)
 	}
+
+	// If commit is successful, rollback reports error which is ignored. I.e. a no-op
 	defer func() {
 		_ = tx.Rollback(ctx)
 	}()
 
+	// Sets timeout for lock acquisition, not for query runtime
+	// The `true` is so that the setting only applies to the current transaction
 	if store.lockTimeout > 0 {
 		milliseconds := max(store.lockTimeout.Milliseconds(), 1)
 		_, err = tx.Exec(
@@ -103,6 +107,10 @@ func withTransaction[T any](
 		}
 	}
 
+	// Applies the operation using the `pgx.Tx` object  (a connection returned from the pool)
+	// The `operation` parameter is a function that takes in a `Queries` object
+	// I.e. The `operation` function will use that object to do all the queries
+	// associated with the TX
 	result, err = operation(db.New(tx))
 	if err != nil {
 		return result, err
@@ -221,6 +229,8 @@ func lockChainAssociations(
 
 func sortedUniqueChainKeys(values []chainKey) []chainKey {
 	result := append([]chainKey(nil), values...)
+
+	// Sorts by rank_id then chain_id
 	sort.Slice(result, func(left, right int) bool {
 		comparison := bytes.Compare(result[left].rankID[:], result[right].rankID[:])
 		if comparison != 0 {
@@ -229,6 +239,7 @@ func sortedUniqueChainKeys(values []chainKey) []chainKey {
 		return result[left].chainID < result[right].chainID
 	})
 
+	// Removes duplicates since identical rows are now adjacent
 	writeIndex := 0
 	for _, value := range result {
 		if writeIndex > 0 && result[writeIndex-1] == value {
