@@ -23,16 +23,13 @@ CREATE TYPE chunk_state AS ENUM (
 CREATE TABLE jobs (
     job_id uuid PRIMARY KEY,
     state job_state NOT NULL DEFAULT 'PENDING',
-    input_manifest_ref text NOT NULL CHECK (btrim(input_manifest_ref) <> ''),
 
     total_chunk_count bigint NOT NULL CHECK (total_chunk_count > 0),
     succeeded_chunk_count bigint NOT NULL DEFAULT 0 CHECK (succeeded_chunk_count >= 0),
     failed_chunk_count bigint NOT NULL DEFAULT 0 CHECK (failed_chunk_count >= 0),
 
     max_retries integer NOT NULL CHECK (max_retries >= 0 AND max_retries < 2147483647),
-    retry_backoff_initial_ms bigint NOT NULL CHECK (retry_backoff_initial_ms >= 0),
-    retry_backoff_max_ms bigint NOT NULL
-        CHECK (retry_backoff_max_ms >= retry_backoff_initial_ms),
+    retry_backoff_ms bigint NOT NULL CHECK (retry_backoff_ms >= 0),
     lease_duration_ms bigint NOT NULL CHECK (lease_duration_ms > 0),
 
     created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
@@ -67,9 +64,9 @@ CREATE TABLE jobs (
     ),
     CONSTRAINT jobs_failed_valid CHECK (
         state <> 'FAILED'
-        OR registration_completed_at IS NULL
         OR (
-            failed_chunk_count > 0
+            registration_completed_at IS NOT NULL
+            AND failed_chunk_count > 0
             AND succeeded_chunk_count + failed_chunk_count = total_chunk_count
         )
     )

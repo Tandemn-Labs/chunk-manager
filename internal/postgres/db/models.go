@@ -169,13 +169,11 @@ type Chunk struct {
 type Job struct {
 	JobID                   uuid.UUID          `json:"job_id"`
 	State                   JobState           `json:"state"`
-	InputManifestRef        string             `json:"input_manifest_ref"`
 	TotalChunkCount         int64              `json:"total_chunk_count"`
 	SucceededChunkCount     int64              `json:"succeeded_chunk_count"`
 	FailedChunkCount        int64              `json:"failed_chunk_count"`
 	MaxRetries              int32              `json:"max_retries"`
-	RetryBackoffInitialMs   int64              `json:"retry_backoff_initial_ms"`
-	RetryBackoffMaxMs       int64              `json:"retry_backoff_max_ms"`
+	RetryBackoffMs          int64              `json:"retry_backoff_ms"`
 	LeaseDurationMs         int64              `json:"lease_duration_ms"`
 	CreatedAt               pgtype.Timestamptz `json:"created_at"`
 	RegistrationCompletedAt pgtype.Timestamptz `json:"registration_completed_at"`

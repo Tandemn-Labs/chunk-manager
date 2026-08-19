@@ -19,7 +19,7 @@ SET state = 'CANCELLED',
     updated_at = $1
 WHERE job_id = $2
   AND state IN ('PENDING', 'RUNNING')
-RETURNING job_id, state, input_manifest_ref, total_chunk_count, succeeded_chunk_count, failed_chunk_count, max_retries, retry_backoff_initial_ms, retry_backoff_max_ms, lease_duration_ms, created_at, registration_completed_at, updated_at, terminal_at
+RETURNING job_id, state, total_chunk_count, succeeded_chunk_count, failed_chunk_count, max_retries, retry_backoff_ms, lease_duration_ms, created_at, registration_completed_at, updated_at, terminal_at
 `
 
 type CancelJobParams struct {
@@ -33,13 +33,11 @@ func (q *Queries) CancelJob(ctx context.Context, arg CancelJobParams) (Job, erro
 	err := row.Scan(
 		&i.JobID,
 		&i.State,
-		&i.InputManifestRef,
 		&i.TotalChunkCount,
 		&i.SucceededChunkCount,
 		&i.FailedChunkCount,
 		&i.MaxRetries,
-		&i.RetryBackoffInitialMs,
-		&i.RetryBackoffMaxMs,
+		&i.RetryBackoffMs,
 		&i.LeaseDurationMs,
 		&i.CreatedAt,
 		&i.RegistrationCompletedAt,
@@ -65,11 +63,9 @@ func (q *Queries) CountJobChunks(ctx context.Context, jobID uuid.UUID) (int64, e
 const createJob = `-- name: CreateJob :one
 INSERT INTO jobs (
     job_id,
-    input_manifest_ref,
     total_chunk_count,
     max_retries,
-    retry_backoff_initial_ms,
-    retry_backoff_max_ms,
+    retry_backoff_ms,
     lease_duration_ms,
     created_at,
     updated_at
@@ -80,32 +76,26 @@ INSERT INTO jobs (
     $4,
     $5,
     $6,
-    $7,
-    $8,
-    $8
+    $6
 )
-RETURNING job_id, state, input_manifest_ref, total_chunk_count, succeeded_chunk_count, failed_chunk_count, max_retries, retry_backoff_initial_ms, retry_backoff_max_ms, lease_duration_ms, created_at, registration_completed_at, updated_at, terminal_at
+RETURNING job_id, state, total_chunk_count, succeeded_chunk_count, failed_chunk_count, max_retries, retry_backoff_ms, lease_duration_ms, created_at, registration_completed_at, updated_at, terminal_at
 `
 
 type CreateJobParams struct {
-	JobID                 uuid.UUID          `json:"job_id"`
-	InputManifestRef      string             `json:"input_manifest_ref"`
-	TotalChunkCount       int64              `json:"total_chunk_count"`
-	MaxRetries            int32              `json:"max_retries"`
-	RetryBackoffInitialMs int64              `json:"retry_backoff_initial_ms"`
-	RetryBackoffMaxMs     int64              `json:"retry_backoff_max_ms"`
-	LeaseDurationMs       int64              `json:"lease_duration_ms"`
-	DbTime                pgtype.Timestamptz `json:"db_time"`
+	JobID           uuid.UUID          `json:"job_id"`
+	TotalChunkCount int64              `json:"total_chunk_count"`
+	MaxRetries      int32              `json:"max_retries"`
+	RetryBackoffMs  int64              `json:"retry_backoff_ms"`
+	LeaseDurationMs int64              `json:"lease_duration_ms"`
+	DbTime          pgtype.Timestamptz `json:"db_time"`
 }
 
 func (q *Queries) CreateJob(ctx context.Context, arg CreateJobParams) (Job, error) {
 	row := q.db.QueryRow(ctx, createJob,
 		arg.JobID,
-		arg.InputManifestRef,
 		arg.TotalChunkCount,
 		arg.MaxRetries,
-		arg.RetryBackoffInitialMs,
-		arg.RetryBackoffMaxMs,
+		arg.RetryBackoffMs,
 		arg.LeaseDurationMs,
 		arg.DbTime,
 	)
@@ -113,50 +103,11 @@ func (q *Queries) CreateJob(ctx context.Context, arg CreateJobParams) (Job, erro
 	err := row.Scan(
 		&i.JobID,
 		&i.State,
-		&i.InputManifestRef,
 		&i.TotalChunkCount,
 		&i.SucceededChunkCount,
 		&i.FailedChunkCount,
 		&i.MaxRetries,
-		&i.RetryBackoffInitialMs,
-		&i.RetryBackoffMaxMs,
-		&i.LeaseDurationMs,
-		&i.CreatedAt,
-		&i.RegistrationCompletedAt,
-		&i.UpdatedAt,
-		&i.TerminalAt,
-	)
-	return i, err
-}
-
-const failJobRegistration = `-- name: FailJobRegistration :one
-UPDATE jobs
-SET state = 'FAILED',
-    terminal_at = $1,
-    updated_at = $1
-WHERE job_id = $2
-  AND state = 'PENDING'
-RETURNING job_id, state, input_manifest_ref, total_chunk_count, succeeded_chunk_count, failed_chunk_count, max_retries, retry_backoff_initial_ms, retry_backoff_max_ms, lease_duration_ms, created_at, registration_completed_at, updated_at, terminal_at
-`
-
-type FailJobRegistrationParams struct {
-	DbTime pgtype.Timestamptz `json:"db_time"`
-	JobID  uuid.UUID          `json:"job_id"`
-}
-
-func (q *Queries) FailJobRegistration(ctx context.Context, arg FailJobRegistrationParams) (Job, error) {
-	row := q.db.QueryRow(ctx, failJobRegistration, arg.DbTime, arg.JobID)
-	var i Job
-	err := row.Scan(
-		&i.JobID,
-		&i.State,
-		&i.InputManifestRef,
-		&i.TotalChunkCount,
-		&i.SucceededChunkCount,
-		&i.FailedChunkCount,
-		&i.MaxRetries,
-		&i.RetryBackoffInitialMs,
-		&i.RetryBackoffMaxMs,
+		&i.RetryBackoffMs,
 		&i.LeaseDurationMs,
 		&i.CreatedAt,
 		&i.RegistrationCompletedAt,
@@ -173,7 +124,7 @@ SET state = 'RUNNING',
     updated_at = $1
 WHERE job_id = $2
   AND state = 'PENDING'
-RETURNING job_id, state, input_manifest_ref, total_chunk_count, succeeded_chunk_count, failed_chunk_count, max_retries, retry_backoff_initial_ms, retry_backoff_max_ms, lease_duration_ms, created_at, registration_completed_at, updated_at, terminal_at
+RETURNING job_id, state, total_chunk_count, succeeded_chunk_count, failed_chunk_count, max_retries, retry_backoff_ms, lease_duration_ms, created_at, registration_completed_at, updated_at, terminal_at
 `
 
 type FinalizeJobRegistrationParams struct {
@@ -187,13 +138,11 @@ func (q *Queries) FinalizeJobRegistration(ctx context.Context, arg FinalizeJobRe
 	err := row.Scan(
 		&i.JobID,
 		&i.State,
-		&i.InputManifestRef,
 		&i.TotalChunkCount,
 		&i.SucceededChunkCount,
 		&i.FailedChunkCount,
 		&i.MaxRetries,
-		&i.RetryBackoffInitialMs,
-		&i.RetryBackoffMaxMs,
+		&i.RetryBackoffMs,
 		&i.LeaseDurationMs,
 		&i.CreatedAt,
 		&i.RegistrationCompletedAt,
@@ -204,7 +153,7 @@ func (q *Queries) FinalizeJobRegistration(ctx context.Context, arg FinalizeJobRe
 }
 
 const getJob = `-- name: GetJob :one
-SELECT job_id, state, input_manifest_ref, total_chunk_count, succeeded_chunk_count, failed_chunk_count, max_retries, retry_backoff_initial_ms, retry_backoff_max_ms, lease_duration_ms, created_at, registration_completed_at, updated_at, terminal_at
+SELECT job_id, state, total_chunk_count, succeeded_chunk_count, failed_chunk_count, max_retries, retry_backoff_ms, lease_duration_ms, created_at, registration_completed_at, updated_at, terminal_at
 FROM jobs
 WHERE job_id = $1
 `
@@ -215,13 +164,11 @@ func (q *Queries) GetJob(ctx context.Context, jobID uuid.UUID) (Job, error) {
 	err := row.Scan(
 		&i.JobID,
 		&i.State,
-		&i.InputManifestRef,
 		&i.TotalChunkCount,
 		&i.SucceededChunkCount,
 		&i.FailedChunkCount,
 		&i.MaxRetries,
-		&i.RetryBackoffInitialMs,
-		&i.RetryBackoffMaxMs,
+		&i.RetryBackoffMs,
 		&i.LeaseDurationMs,
 		&i.CreatedAt,
 		&i.RegistrationCompletedAt,
@@ -232,7 +179,7 @@ func (q *Queries) GetJob(ctx context.Context, jobID uuid.UUID) (Job, error) {
 }
 
 const lockJob = `-- name: LockJob :one
-SELECT job_id, state, input_manifest_ref, total_chunk_count, succeeded_chunk_count, failed_chunk_count, max_retries, retry_backoff_initial_ms, retry_backoff_max_ms, lease_duration_ms, created_at, registration_completed_at, updated_at, terminal_at
+SELECT job_id, state, total_chunk_count, succeeded_chunk_count, failed_chunk_count, max_retries, retry_backoff_ms, lease_duration_ms, created_at, registration_completed_at, updated_at, terminal_at
 FROM jobs
 WHERE job_id = $1
 FOR UPDATE
@@ -244,13 +191,11 @@ func (q *Queries) LockJob(ctx context.Context, jobID uuid.UUID) (Job, error) {
 	err := row.Scan(
 		&i.JobID,
 		&i.State,
-		&i.InputManifestRef,
 		&i.TotalChunkCount,
 		&i.SucceededChunkCount,
 		&i.FailedChunkCount,
 		&i.MaxRetries,
-		&i.RetryBackoffInitialMs,
-		&i.RetryBackoffMaxMs,
+		&i.RetryBackoffMs,
 		&i.LeaseDurationMs,
 		&i.CreatedAt,
 		&i.RegistrationCompletedAt,
@@ -276,7 +221,7 @@ SET failed_chunk_count = failed_chunk_count + 1,
     updated_at = $1
 WHERE job_id = $2
   AND state = 'RUNNING'
-RETURNING job_id, state, input_manifest_ref, total_chunk_count, succeeded_chunk_count, failed_chunk_count, max_retries, retry_backoff_initial_ms, retry_backoff_max_ms, lease_duration_ms, created_at, registration_completed_at, updated_at, terminal_at
+RETURNING job_id, state, total_chunk_count, succeeded_chunk_count, failed_chunk_count, max_retries, retry_backoff_ms, lease_duration_ms, created_at, registration_completed_at, updated_at, terminal_at
 `
 
 type RecordJobChunkFailedParams struct {
@@ -290,13 +235,11 @@ func (q *Queries) RecordJobChunkFailed(ctx context.Context, arg RecordJobChunkFa
 	err := row.Scan(
 		&i.JobID,
 		&i.State,
-		&i.InputManifestRef,
 		&i.TotalChunkCount,
 		&i.SucceededChunkCount,
 		&i.FailedChunkCount,
 		&i.MaxRetries,
-		&i.RetryBackoffInitialMs,
-		&i.RetryBackoffMaxMs,
+		&i.RetryBackoffMs,
 		&i.LeaseDurationMs,
 		&i.CreatedAt,
 		&i.RegistrationCompletedAt,
@@ -325,7 +268,7 @@ SET succeeded_chunk_count = succeeded_chunk_count + 1,
     updated_at = $1
 WHERE job_id = $2
   AND state = 'RUNNING'
-RETURNING job_id, state, input_manifest_ref, total_chunk_count, succeeded_chunk_count, failed_chunk_count, max_retries, retry_backoff_initial_ms, retry_backoff_max_ms, lease_duration_ms, created_at, registration_completed_at, updated_at, terminal_at
+RETURNING job_id, state, total_chunk_count, succeeded_chunk_count, failed_chunk_count, max_retries, retry_backoff_ms, lease_duration_ms, created_at, registration_completed_at, updated_at, terminal_at
 `
 
 type RecordJobChunkSucceededParams struct {
@@ -339,13 +282,11 @@ func (q *Queries) RecordJobChunkSucceeded(ctx context.Context, arg RecordJobChun
 	err := row.Scan(
 		&i.JobID,
 		&i.State,
-		&i.InputManifestRef,
 		&i.TotalChunkCount,
 		&i.SucceededChunkCount,
 		&i.FailedChunkCount,
 		&i.MaxRetries,
-		&i.RetryBackoffInitialMs,
-		&i.RetryBackoffMaxMs,
+		&i.RetryBackoffMs,
 		&i.LeaseDurationMs,
 		&i.CreatedAt,
 		&i.RegistrationCompletedAt,

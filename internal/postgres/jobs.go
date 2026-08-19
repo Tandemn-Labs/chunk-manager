@@ -13,9 +13,6 @@ import (
 )
 
 func (store *Store) CreateJob(ctx context.Context, params CreateJobParams) (Job, error) {
-	if strings.TrimSpace(params.InputManifestRef) == "" {
-		return Job{}, fmt.Errorf("%w: input manifest reference is required", ErrInvalidArgument)
-	}
 	if params.TotalChunkCount <= 0 {
 		return Job{}, fmt.Errorf("%w: total chunk count must be positive", ErrInvalidArgument)
 	}
@@ -25,8 +22,8 @@ func (store *Store) CreateJob(ctx context.Context, params CreateJobParams) (Job,
 	if params.MaxRetries == 2147483647 {
 		return Job{}, fmt.Errorf("%w: maximum retries is too large", ErrInvalidArgument)
 	}
-	if params.RetryBackoffInitial < 0 || params.RetryBackoffMax < params.RetryBackoffInitial {
-		return Job{}, fmt.Errorf("%w: invalid retry backoff", ErrInvalidArgument)
+	if params.RetryBackoff < 0 {
+		return Job{}, fmt.Errorf("%w: retry backoff cannot be negative", ErrInvalidArgument)
 	}
 	if params.LeaseDuration < time.Millisecond {
 		return Job{}, fmt.Errorf("%w: lease duration must be at least one millisecond", ErrInvalidArgument)
@@ -38,14 +35,12 @@ func (store *Store) CreateJob(ctx context.Context, params CreateJobParams) (Job,
 			return Job{}, err
 		}
 		row, err := queries.CreateJob(ctx, db.CreateJobParams{
-			JobID:                 dbUUID(params.JobID),
-			InputManifestRef:      params.InputManifestRef,
-			TotalChunkCount:       params.TotalChunkCount,
-			MaxRetries:            params.MaxRetries,
-			RetryBackoffInitialMs: params.RetryBackoffInitial.Milliseconds(),
-			RetryBackoffMaxMs:     params.RetryBackoffMax.Milliseconds(),
-			LeaseDurationMs:       params.LeaseDuration.Milliseconds(),
-			DbTime:                dbTimestamp(now),
+			JobID:           dbUUID(params.JobID),
+			TotalChunkCount: params.TotalChunkCount,
+			MaxRetries:      params.MaxRetries,
+			RetryBackoffMs:  params.RetryBackoff.Milliseconds(),
+			LeaseDurationMs: params.LeaseDuration.Milliseconds(),
+			DbTime:          dbTimestamp(now),
 		})
 		if err != nil {
 			return Job{}, fmt.Errorf("create job: %w", err)
@@ -169,31 +164,6 @@ func (store *Store) FinalizeJobRegistration(ctx context.Context, jobID ulid.ULID
 		})
 		if err != nil {
 			return Job{}, fmt.Errorf("finalize job registration: %w", err)
-		}
-		return jobFromDB(updated), nil
-	})
-	return result, normalizeDatabaseError(err)
-}
-
-func (store *Store) FailJobRegistration(ctx context.Context, jobID ulid.ULID) (Job, error) {
-	result, err := withTransaction(ctx, store, func(queries *db.Queries) (Job, error) {
-		job, err := queries.LockJob(ctx, dbUUID(jobID))
-		if err != nil {
-			return Job{}, fmt.Errorf("lock job: %w", err)
-		}
-		if job.State != db.JobStatePENDING {
-			return Job{}, fmt.Errorf("%w: job is not pending", ErrInvalidState)
-		}
-		now, err := databaseTime(ctx, queries)
-		if err != nil {
-			return Job{}, err
-		}
-		updated, err := queries.FailJobRegistration(ctx, db.FailJobRegistrationParams{
-			DbTime: dbTimestamp(now),
-			JobID:  dbUUID(jobID),
-		})
-		if err != nil {
-			return Job{}, fmt.Errorf("fail job registration: %w", err)
 		}
 		return jobFromDB(updated), nil
 	})

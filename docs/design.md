@@ -65,6 +65,7 @@ Common store infrastructure. Defines a key `Store` struct that contains the `pgx
 - A more important function is `withTransaction` which essentially obtains a connection from the pool and allow all the queries associated with one transaction to occur as part of the same connection, with commit / rollback
 - Throughout the handwritten Go codes, you will see `withTransaction` used to wrap full functions that make multiple queries
 
-
+#### reconciliation.go
+- `ReconcileDrainingAssociation` sees all chunks associated with a specific draining chain, checks for expiry and requeues the chunks.
 
 

@@ -462,7 +462,7 @@ func (store *Store) FailChunk(ctx context.Context, params FailChunkParams) (Fail
 		failureMessage := params.Message
 		if params.Retriable && chunk.RetryCount < job.MaxRetries {
 			retryCount := chunk.RetryCount + 1
-			notBefore := now.Add(retryBackoff(job, retryCount))
+			notBefore := now.Add(time.Duration(job.RetryBackoffMs) * time.Millisecond)
 			if _, err := queries.RetryChunk(ctx, db.RetryChunkParams{
 				RetryCount:     retryCount,
 				NotBefore:      dbTimestamp(notBefore),
@@ -581,20 +581,4 @@ func completionMatches(chunk db.Chunk, params CompleteChunkParams) bool {
 		chunk.OutputUri != nil && *chunk.OutputUri == params.OutputURI &&
 		chunk.OutputChecksum != nil && *chunk.OutputChecksum == params.Checksum &&
 		chunk.OutputSizeBytes != nil && *chunk.OutputSizeBytes == params.OutputSize
-}
-
-func retryBackoff(job db.Job, retryCount int32) time.Duration {
-	initial := time.Duration(job.RetryBackoffInitialMs) * time.Millisecond
-	maximum := time.Duration(job.RetryBackoffMaxMs) * time.Millisecond
-	if initial == 0 {
-		return 0
-	}
-	backoff := initial
-	for count := int32(1); count < retryCount && backoff < maximum; count++ {
-		if backoff > maximum-backoff {
-			return maximum
-		}
-		backoff *= 2
-	}
-	return min(backoff, maximum)
 }

@@ -1,21 +1,17 @@
 -- name: CreateJob :one
 INSERT INTO jobs (
     job_id,
-    input_manifest_ref,
     total_chunk_count,
     max_retries,
-    retry_backoff_initial_ms,
-    retry_backoff_max_ms,
+    retry_backoff_ms,
     lease_duration_ms,
     created_at,
     updated_at
 ) VALUES (
     sqlc.arg(job_id),
-    sqlc.arg(input_manifest_ref),
     sqlc.arg(total_chunk_count),
     sqlc.arg(max_retries),
-    sqlc.arg(retry_backoff_initial_ms),
-    sqlc.arg(retry_backoff_max_ms),
+    sqlc.arg(retry_backoff_ms),
     sqlc.arg(lease_duration_ms),
     sqlc.arg(db_time),
     sqlc.arg(db_time)
@@ -42,15 +38,6 @@ WHERE job_id = sqlc.arg(job_id);
 UPDATE jobs
 SET state = 'RUNNING',
     registration_completed_at = sqlc.arg(db_time),
-    updated_at = sqlc.arg(db_time)
-WHERE job_id = sqlc.arg(job_id)
-  AND state = 'PENDING'
-RETURNING *;
-
--- name: FailJobRegistration :one
-UPDATE jobs
-SET state = 'FAILED',
-    terminal_at = sqlc.arg(db_time),
     updated_at = sqlc.arg(db_time)
 WHERE job_id = sqlc.arg(job_id)
   AND state = 'PENDING'

@@ -161,13 +161,11 @@ func jobFromDB(value db.Job) Job {
 	return Job{
 		ID:                      ulidFromDB(value.JobID),
 		State:                   JobState(value.State),
-		InputManifestRef:        value.InputManifestRef,
 		TotalChunkCount:         value.TotalChunkCount,
 		SucceededChunkCount:     value.SucceededChunkCount,
 		FailedChunkCount:        value.FailedChunkCount,
 		MaxRetries:              value.MaxRetries,
-		RetryBackoffInitial:     time.Duration(value.RetryBackoffInitialMs) * time.Millisecond,
-		RetryBackoffMax:         time.Duration(value.RetryBackoffMaxMs) * time.Millisecond,
+		RetryBackoff:            time.Duration(value.RetryBackoffMs) * time.Millisecond,
 		LeaseDuration:           time.Duration(value.LeaseDurationMs) * time.Millisecond,
 		CreatedAt:               value.CreatedAt.Time,
 		RegistrationCompletedAt: optionalTime(value.RegistrationCompletedAt),
@@ -256,16 +254,16 @@ func normalizeDatabaseError(err error) error {
 		return nil
 	}
 	if errors.Is(err, pgx.ErrNoRows) {
-		return fmt.Errorf("%w: database row", ErrNotFound)
+		return fmt.Errorf("%w: %w", ErrNotFound, err)
 	}
 
 	var postgresError *pgconn.PgError
 	if errors.As(err, &postgresError) {
 		switch postgresError.Code {
 		case "23503", "23505":
-			return fmt.Errorf("%w: %s", ErrConflict, postgresError.ConstraintName)
+			return fmt.Errorf("%w (%s): %w", ErrConflict, postgresError.ConstraintName, err)
 		case "22023", "23502", "23514":
-			return fmt.Errorf("%w: %s", ErrInvalidArgument, postgresError.ConstraintName)
+			return fmt.Errorf("%w (%s): %w", ErrInvalidArgument, postgresError.ConstraintName, err)
 		}
 	}
 	return err

@@ -113,8 +113,7 @@ Required fields:
 - `job_id`
 - State and timestamps
 - Total, succeeded, and failed chunk counts
-- Maximum retries and retry backoff policy
-- Input manifest reference
+- Maximum retries and fixed retry backoff
 
 ### Chain association
 
@@ -157,7 +156,7 @@ No attempt-history, events, or request-deduplication table is required.
 | `PENDING` | Chunks are being registered. |
 | `RUNNING` | Active chains may claim chunks. |
 | `SUCCEEDED` | Every chunk succeeded. |
-| `FAILED` | Registration failed, or all chunks are terminal and at least one failed. |
+| `FAILED` | Every chunk is terminal and at least one failed. |
 | `CANCELLED` | The job was cancelled. |
 
 A chunk failure does not stop the job. Remaining chunks continue until every
@@ -302,8 +301,8 @@ available after its lease expires.
 
 ## 7. Retry Policy
 
-Each job defines `max_retries` and backoff settings. `retry_count` starts at
-zero.
+Each job defines `max_retries` and a fixed `retry_backoff`. `retry_count` starts
+at zero.
 
 Retry count increments when:
 
@@ -319,9 +318,11 @@ Retry count does not increment when:
 When `retry_count` reaches `max_retries`, the next retryable failure or expired
 active-chain replacement makes the chunk `FAILED`.
 
-Retry backoff is stored as `READY.not_before`. Transient infrastructure,
-storage, or engine errors are normally retriable. Invalid input is normally
-terminal.
+When a chain reports a retriable failure and retry budget remains, the chunk's
+`READY.not_before` is set to database time plus `retry_backoff`. Replacement of
+an expired active-chain lease happens directly during a claim and does not wait
+through this backoff. Transient infrastructure, storage, or engine errors are
+normally retriable. Invalid input is normally terminal.
 
 ## 8. Chain Draining
 

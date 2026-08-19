@@ -36,13 +36,11 @@ const (
 type Job struct {
 	ID                      ulid.ULID
 	State                   JobState
-	InputManifestRef        string
 	TotalChunkCount         int64
 	SucceededChunkCount     int64
 	FailedChunkCount        int64
 	MaxRetries              int32
-	RetryBackoffInitial     time.Duration
-	RetryBackoffMax         time.Duration
+	RetryBackoff            time.Duration
 	LeaseDuration           time.Duration
 	CreatedAt               time.Time
 	RegistrationCompletedAt *time.Time
@@ -76,13 +74,11 @@ type ChunkRegistration struct {
 }
 
 type CreateJobParams struct {
-	JobID               ulid.ULID
-	InputManifestRef    string
-	TotalChunkCount     int64
-	MaxRetries          int32
-	RetryBackoffInitial time.Duration
-	RetryBackoffMax     time.Duration
-	LeaseDuration       time.Duration
+	JobID           ulid.ULID
+	TotalChunkCount int64
+	MaxRetries      int32
+	RetryBackoff    time.Duration
+	LeaseDuration   time.Duration
 }
 
 type ClaimChunksParams struct {
