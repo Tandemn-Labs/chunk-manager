@@ -1443,8 +1443,9 @@ func (x *RenewLeasesRequest) GetLeases() []*LeaseReference {
 }
 
 type RenewLeasesResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Renewed       []*RenewedLease        `protobuf:"bytes,1,rep,name=renewed,proto3" json:"renewed,omitempty"`
+	state   protoimpl.MessageState `protogen:"open.v1"`
+	Renewed []*RenewedLease        `protobuf:"bytes,1,rep,name=renewed,proto3" json:"renewed,omitempty"`
+	// In case a lease expired, cannot be renewed
 	Stale         []*LeaseReference      `protobuf:"bytes,2,rep,name=stale,proto3" json:"stale,omitempty"`
 	DatabaseTime  *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=database_time,json=databaseTime,proto3" json:"database_time,omitempty"`
 	unknownFields protoimpl.UnknownFields
@@ -1631,12 +1632,13 @@ func (x *CompleteChunkResponse) GetReplayed() bool {
 }
 
 type FailChunkRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Chain         *ChainIdentity         `protobuf:"bytes,1,opt,name=chain,proto3" json:"chain,omitempty"`
-	Lease         *LeaseReference        `protobuf:"bytes,2,opt,name=lease,proto3" json:"lease,omitempty"`
-	FailureClass  string                 `protobuf:"bytes,3,opt,name=failure_class,json=failureClass,proto3" json:"failure_class,omitempty"`
-	Message       string                 `protobuf:"bytes,4,opt,name=message,proto3" json:"message,omitempty"`
-	Retriable     bool                   `protobuf:"varint,5,opt,name=retriable,proto3" json:"retriable,omitempty"`
+	state        protoimpl.MessageState `protogen:"open.v1"`
+	Chain        *ChainIdentity         `protobuf:"bytes,1,opt,name=chain,proto3" json:"chain,omitempty"`
+	Lease        *LeaseReference        `protobuf:"bytes,2,opt,name=lease,proto3" json:"lease,omitempty"`
+	FailureClass string                 `protobuf:"bytes,3,opt,name=failure_class,json=failureClass,proto3" json:"failure_class,omitempty"`
+	Message      string                 `protobuf:"bytes,4,opt,name=message,proto3" json:"message,omitempty"`
+	// Caller can specify whether chunk is retriable
+	Retriable     bool `protobuf:"varint,5,opt,name=retriable,proto3" json:"retriable,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1709,8 +1711,6 @@ func (x *FailChunkRequest) GetRetriable() bool {
 type FailChunkResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	JobState      JobState               `protobuf:"varint,1,opt,name=job_state,json=jobState,proto3,enum=tandemn.chunkmanager.v1.JobState" json:"job_state,omitempty"`
-	Retried       bool                   `protobuf:"varint,2,opt,name=retried,proto3" json:"retried,omitempty"`
-	NotBefore     *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=not_before,json=notBefore,proto3" json:"not_before,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1750,20 +1750,6 @@ func (x *FailChunkResponse) GetJobState() JobState {
 		return x.JobState
 	}
 	return JobState_JOB_STATE_UNSPECIFIED
-}
-
-func (x *FailChunkResponse) GetRetried() bool {
-	if x != nil {
-		return x.Retried
-	}
-	return false
-}
-
-func (x *FailChunkResponse) GetNotBefore() *timestamppb.Timestamp {
-	if x != nil {
-		return x.NotBefore
-	}
-	return nil
 }
 
 var File_tandemn_chunkmanager_v1_chunk_manager_proto protoreflect.FileDescriptor
@@ -1887,12 +1873,9 @@ const file_tandemn_chunkmanager_v1_chunk_manager_proto_rawDesc = "" +
 	"\x05lease\x18\x02 \x01(\v2'.tandemn.chunkmanager.v1.LeaseReferenceR\x05lease\x12#\n" +
 	"\rfailure_class\x18\x03 \x01(\tR\ffailureClass\x12\x18\n" +
 	"\amessage\x18\x04 \x01(\tR\amessage\x12\x1c\n" +
-	"\tretriable\x18\x05 \x01(\bR\tretriable\"\xa8\x01\n" +
+	"\tretriable\x18\x05 \x01(\bR\tretriable\"S\n" +
 	"\x11FailChunkResponse\x12>\n" +
-	"\tjob_state\x18\x01 \x01(\x0e2!.tandemn.chunkmanager.v1.JobStateR\bjobState\x12\x18\n" +
-	"\aretried\x18\x02 \x01(\bR\aretried\x129\n" +
-	"\n" +
-	"not_before\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\tnotBefore*\x9b\x01\n" +
+	"\tjob_state\x18\x01 \x01(\x0e2!.tandemn.chunkmanager.v1.JobStateR\bjobState*\x9b\x01\n" +
 	"\bJobState\x12\x19\n" +
 	"\x15JOB_STATE_UNSPECIFIED\x10\x00\x12\x15\n" +
 	"\x11JOB_STATE_PENDING\x10\x01\x12\x15\n" +
@@ -2009,34 +1992,33 @@ var file_tandemn_chunkmanager_v1_chunk_manager_proto_depIdxs = []int32{
 	3,  // 37: tandemn.chunkmanager.v1.FailChunkRequest.chain:type_name -> tandemn.chunkmanager.v1.ChainIdentity
 	7,  // 38: tandemn.chunkmanager.v1.FailChunkRequest.lease:type_name -> tandemn.chunkmanager.v1.LeaseReference
 	0,  // 39: tandemn.chunkmanager.v1.FailChunkResponse.job_state:type_name -> tandemn.chunkmanager.v1.JobState
-	32, // 40: tandemn.chunkmanager.v1.FailChunkResponse.not_before:type_name -> google.protobuf.Timestamp
-	9,  // 41: tandemn.chunkmanager.v1.PlannerService.CreateJob:input_type -> tandemn.chunkmanager.v1.CreateJobRequest
-	11, // 42: tandemn.chunkmanager.v1.PlannerService.GetJob:input_type -> tandemn.chunkmanager.v1.GetJobRequest
-	13, // 43: tandemn.chunkmanager.v1.PlannerService.RegisterChunks:input_type -> tandemn.chunkmanager.v1.RegisterChunksRequest
-	15, // 44: tandemn.chunkmanager.v1.PlannerService.FinalizeJobRegistration:input_type -> tandemn.chunkmanager.v1.FinalizeJobRegistrationRequest
-	17, // 45: tandemn.chunkmanager.v1.PlannerService.CancelJob:input_type -> tandemn.chunkmanager.v1.CancelJobRequest
-	19, // 46: tandemn.chunkmanager.v1.PlannerService.AddChainAssociation:input_type -> tandemn.chunkmanager.v1.AddChainAssociationRequest
-	21, // 47: tandemn.chunkmanager.v1.PlannerService.DrainChainAssociation:input_type -> tandemn.chunkmanager.v1.DrainChainAssociationRequest
-	23, // 48: tandemn.chunkmanager.v1.WorkerService.ClaimChunks:input_type -> tandemn.chunkmanager.v1.ClaimChunksRequest
-	25, // 49: tandemn.chunkmanager.v1.WorkerService.RenewLeases:input_type -> tandemn.chunkmanager.v1.RenewLeasesRequest
-	27, // 50: tandemn.chunkmanager.v1.WorkerService.CompleteChunk:input_type -> tandemn.chunkmanager.v1.CompleteChunkRequest
-	29, // 51: tandemn.chunkmanager.v1.WorkerService.FailChunk:input_type -> tandemn.chunkmanager.v1.FailChunkRequest
-	10, // 52: tandemn.chunkmanager.v1.PlannerService.CreateJob:output_type -> tandemn.chunkmanager.v1.CreateJobResponse
-	12, // 53: tandemn.chunkmanager.v1.PlannerService.GetJob:output_type -> tandemn.chunkmanager.v1.GetJobResponse
-	14, // 54: tandemn.chunkmanager.v1.PlannerService.RegisterChunks:output_type -> tandemn.chunkmanager.v1.RegisterChunksResponse
-	16, // 55: tandemn.chunkmanager.v1.PlannerService.FinalizeJobRegistration:output_type -> tandemn.chunkmanager.v1.FinalizeJobRegistrationResponse
-	18, // 56: tandemn.chunkmanager.v1.PlannerService.CancelJob:output_type -> tandemn.chunkmanager.v1.CancelJobResponse
-	20, // 57: tandemn.chunkmanager.v1.PlannerService.AddChainAssociation:output_type -> tandemn.chunkmanager.v1.AddChainAssociationResponse
-	22, // 58: tandemn.chunkmanager.v1.PlannerService.DrainChainAssociation:output_type -> tandemn.chunkmanager.v1.DrainChainAssociationResponse
-	24, // 59: tandemn.chunkmanager.v1.WorkerService.ClaimChunks:output_type -> tandemn.chunkmanager.v1.ClaimChunksResponse
-	26, // 60: tandemn.chunkmanager.v1.WorkerService.RenewLeases:output_type -> tandemn.chunkmanager.v1.RenewLeasesResponse
-	28, // 61: tandemn.chunkmanager.v1.WorkerService.CompleteChunk:output_type -> tandemn.chunkmanager.v1.CompleteChunkResponse
-	30, // 62: tandemn.chunkmanager.v1.WorkerService.FailChunk:output_type -> tandemn.chunkmanager.v1.FailChunkResponse
-	52, // [52:63] is the sub-list for method output_type
-	41, // [41:52] is the sub-list for method input_type
-	41, // [41:41] is the sub-list for extension type_name
-	41, // [41:41] is the sub-list for extension extendee
-	0,  // [0:41] is the sub-list for field type_name
+	9,  // 40: tandemn.chunkmanager.v1.PlannerService.CreateJob:input_type -> tandemn.chunkmanager.v1.CreateJobRequest
+	11, // 41: tandemn.chunkmanager.v1.PlannerService.GetJob:input_type -> tandemn.chunkmanager.v1.GetJobRequest
+	13, // 42: tandemn.chunkmanager.v1.PlannerService.RegisterChunks:input_type -> tandemn.chunkmanager.v1.RegisterChunksRequest
+	15, // 43: tandemn.chunkmanager.v1.PlannerService.FinalizeJobRegistration:input_type -> tandemn.chunkmanager.v1.FinalizeJobRegistrationRequest
+	17, // 44: tandemn.chunkmanager.v1.PlannerService.CancelJob:input_type -> tandemn.chunkmanager.v1.CancelJobRequest
+	19, // 45: tandemn.chunkmanager.v1.PlannerService.AddChainAssociation:input_type -> tandemn.chunkmanager.v1.AddChainAssociationRequest
+	21, // 46: tandemn.chunkmanager.v1.PlannerService.DrainChainAssociation:input_type -> tandemn.chunkmanager.v1.DrainChainAssociationRequest
+	23, // 47: tandemn.chunkmanager.v1.WorkerService.ClaimChunks:input_type -> tandemn.chunkmanager.v1.ClaimChunksRequest
+	25, // 48: tandemn.chunkmanager.v1.WorkerService.RenewLeases:input_type -> tandemn.chunkmanager.v1.RenewLeasesRequest
+	27, // 49: tandemn.chunkmanager.v1.WorkerService.CompleteChunk:input_type -> tandemn.chunkmanager.v1.CompleteChunkRequest
+	29, // 50: tandemn.chunkmanager.v1.WorkerService.FailChunk:input_type -> tandemn.chunkmanager.v1.FailChunkRequest
+	10, // 51: tandemn.chunkmanager.v1.PlannerService.CreateJob:output_type -> tandemn.chunkmanager.v1.CreateJobResponse
+	12, // 52: tandemn.chunkmanager.v1.PlannerService.GetJob:output_type -> tandemn.chunkmanager.v1.GetJobResponse
+	14, // 53: tandemn.chunkmanager.v1.PlannerService.RegisterChunks:output_type -> tandemn.chunkmanager.v1.RegisterChunksResponse
+	16, // 54: tandemn.chunkmanager.v1.PlannerService.FinalizeJobRegistration:output_type -> tandemn.chunkmanager.v1.FinalizeJobRegistrationResponse
+	18, // 55: tandemn.chunkmanager.v1.PlannerService.CancelJob:output_type -> tandemn.chunkmanager.v1.CancelJobResponse
+	20, // 56: tandemn.chunkmanager.v1.PlannerService.AddChainAssociation:output_type -> tandemn.chunkmanager.v1.AddChainAssociationResponse
+	22, // 57: tandemn.chunkmanager.v1.PlannerService.DrainChainAssociation:output_type -> tandemn.chunkmanager.v1.DrainChainAssociationResponse
+	24, // 58: tandemn.chunkmanager.v1.WorkerService.ClaimChunks:output_type -> tandemn.chunkmanager.v1.ClaimChunksResponse
+	26, // 59: tandemn.chunkmanager.v1.WorkerService.RenewLeases:output_type -> tandemn.chunkmanager.v1.RenewLeasesResponse
+	28, // 60: tandemn.chunkmanager.v1.WorkerService.CompleteChunk:output_type -> tandemn.chunkmanager.v1.CompleteChunkResponse
+	30, // 61: tandemn.chunkmanager.v1.WorkerService.FailChunk:output_type -> tandemn.chunkmanager.v1.FailChunkResponse
+	51, // [51:62] is the sub-list for method output_type
+	40, // [40:51] is the sub-list for method input_type
+	40, // [40:40] is the sub-list for extension type_name
+	40, // [40:40] is the sub-list for extension extendee
+	0,  // [0:40] is the sub-list for field type_name
 }
 
 func init() { file_tandemn_chunkmanager_v1_chunk_manager_proto_init() }

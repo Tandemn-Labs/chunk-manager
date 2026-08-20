@@ -10,7 +10,6 @@ import (
 
 const (
 	defaultGRPCListenAddr          = ":9090"
-	defaultAdminListenAddr         = ":9091"
 	defaultReconcileInterval       = 30 * time.Second
 	defaultReconcileOperationLimit = 10 * time.Second
 	defaultHealthCheckInterval     = 5 * time.Second
@@ -20,7 +19,6 @@ const (
 type config struct {
 	databaseURL             string
 	grpcListenAddr          string
-	adminListenAddr         string
 	reconcileInterval       time.Duration
 	reconcileOperationLimit time.Duration
 	postgresMaxConnections  int32
@@ -37,10 +35,6 @@ func loadConfig(lookupEnv func(string) (string, bool)) (config, error) {
 	}
 
 	grpcListenAddr, err := readString(lookupEnv, "GRPC_LISTEN_ADDR", defaultGRPCListenAddr)
-	if err != nil {
-		return config{}, err
-	}
-	adminListenAddr, err := readString(lookupEnv, "ADMIN_LISTEN_ADDR", defaultAdminListenAddr)
 	if err != nil {
 		return config{}, err
 	}
@@ -96,7 +90,6 @@ func loadConfig(lookupEnv func(string) (string, bool)) (config, error) {
 	return config{
 		databaseURL:             databaseURL,
 		grpcListenAddr:          grpcListenAddr,
-		adminListenAddr:         adminListenAddr,
 		reconcileInterval:       reconcileInterval,
 		reconcileOperationLimit: reconcileOperationLimit,
 		postgresMaxConnections:  postgresMaxConnections,

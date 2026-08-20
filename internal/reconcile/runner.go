@@ -35,7 +35,6 @@ type Config struct {
 	Interval         time.Duration
 	PageSize         int32
 	OperationTimeout time.Duration
-	Observer         func(SweepResult, error)
 }
 
 type SweepResult struct {
@@ -51,7 +50,6 @@ type Runner struct {
 	interval         time.Duration
 	pageSize         int32
 	operationTimeout time.Duration
-	observer         func(SweepResult, error)
 }
 
 func NewRunner(store Store, logger *slog.Logger, config Config) (*Runner, error) {
@@ -80,17 +78,12 @@ func NewRunner(store Store, logger *slog.Logger, config Config) (*Runner, error)
 	if logger == nil {
 		logger = slog.Default()
 	}
-	if config.Observer == nil {
-		config.Observer = func(SweepResult, error) {}
-	}
-
 	return &Runner{
 		store:            store,
 		logger:           logger,
 		interval:         config.Interval,
 		pageSize:         config.PageSize,
 		operationTimeout: config.OperationTimeout,
-		observer:         config.Observer,
 	}, nil
 }
 
@@ -175,7 +168,6 @@ func (runner *Runner) Sweep(ctx context.Context) (SweepResult, error) {
 
 func (runner *Runner) runSweep(ctx context.Context) {
 	result, err := runner.Sweep(ctx)
-	runner.observer(result, err)
 	attributes := []any{
 		slog.Int("examined", result.Examined),
 		slog.Int("requeued", result.Requeued),

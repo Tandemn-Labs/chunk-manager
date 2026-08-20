@@ -25,3 +25,5 @@ Current repo: tandemn-labs/chunk-manager
 This repository is for the chunk manager service to support batched inference tasks. This service is part of a larger, comprehensive inference framework. Tandemn's placement algorithm takes in inference jobs and current resources across all environments (cloud + on-prem), and then plans out the placement of jobs. Furthermore, the algorithm will track metrics and changing job + resource maps, and change the placement of jobs in an adaptive manner to support more efficient use of limited resources. 
 
 This chunk manager runs in a central control plane and is used to manage distribution of chunks across all workers progressing on the same job.
+
+For now, ignore backward-compatbility issues. The repo is under active development and has not been deployed. Change the database schema directly instead of creating migrations, change the protobuf schema directly without reserving fields.

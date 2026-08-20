@@ -491,11 +491,7 @@ func (store *Store) FailChunk(ctx context.Context, params FailChunkParams) (Fail
 			}); err != nil {
 				return FailChunkResult{}, fmt.Errorf("retry chunk: %w", err)
 			}
-			return FailChunkResult{
-				JobState:  JobState(job.State),
-				Retried:   true,
-				NotBefore: &notBefore,
-			}, nil
+			return FailChunkResult{JobState: JobState(job.State)}, nil
 		}
 
 		retryCount := chunk.RetryCount

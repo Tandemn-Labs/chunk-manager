@@ -193,7 +193,7 @@ func TestPlannerAndWorkerLifecycle(t *testing.T) {
 	if err != nil {
 		t.Fatalf("FailChunk: %v", err)
 	}
-	if failed.GetJobState() != chunkmanagerv1.JobState_JOB_STATE_FAILED || failed.GetRetried() {
+	if failed.GetJobState() != chunkmanagerv1.JobState_JOB_STATE_FAILED {
 		t.Fatalf("failure response = %+v, want terminal job failure", failed)
 	}
 
@@ -357,8 +357,8 @@ func TestRetriableFailureBackoffAndGenerationFencing(t *testing.T) {
 	if err != nil {
 		t.Fatalf("retriable FailChunk: %v", err)
 	}
-	if !failed.GetRetried() || failed.GetNotBefore() == nil {
-		t.Fatalf("failure response = %+v, want a scheduled retry", failed)
+	if failed.GetJobState() != chunkmanagerv1.JobState_JOB_STATE_RUNNING {
+		t.Fatalf("failure response = %+v, want running job", failed)
 	}
 
 	tooEarly, err := harness.worker.ClaimChunks(harness.ctx, &chunkmanagerv1.ClaimChunksRequest{
@@ -413,7 +413,7 @@ func TestRetriableFailureBackoffAndGenerationFencing(t *testing.T) {
 	if err != nil {
 		t.Fatalf("exhausting FailChunk: %v", err)
 	}
-	if exhausted.GetRetried() || exhausted.GetJobState() != chunkmanagerv1.JobState_JOB_STATE_FAILED {
+	if exhausted.GetJobState() != chunkmanagerv1.JobState_JOB_STATE_FAILED {
 		t.Fatalf("exhausted failure = %+v, want terminal FAILED", exhausted)
 	}
 }

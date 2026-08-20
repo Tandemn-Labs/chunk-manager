@@ -47,11 +47,11 @@ must be fenced and nonterminal jobs recreated after such a restore.
 ## Protobuf
 
 The versioned API is in `proto/tandemn/chunkmanager/v1`. Generated Go code is
-committed under `gen/go`. Lint and regenerate it with the pinned Buf command:
+committed under `gen/go`. Lint and regenerate it with the local Buf CLI:
 
 ```sh
-go run github.com/bufbuild/buf/cmd/buf@v1.60.0 lint
-go run github.com/bufbuild/buf/cmd/buf@v1.60.0 generate
+buf lint
+buf generate
 ```
 
 ## Running the service
@@ -64,22 +64,21 @@ go run ./cmd/dbmigrate up
 go run ./cmd/chunk-manager
 ```
 
-The gRPC listener defaults to `:9090`. The admin listener defaults to `:9091`
-and exposes Prometheus metrics at `/metrics`. The standard gRPC health service
-publishes `liveness` and `readiness` service names. Reflection is enabled for
-development and troubleshooting.
+The gRPC listener defaults to `:9090`. The standard gRPC health service publishes
+`liveness` and `readiness` service names. Reflection is enabled for development
+and troubleshooting.
 
-| Environment variable | Default |
-| --- | --- |
-| `GRPC_LISTEN_ADDR` | `:9090` |
-| `ADMIN_LISTEN_ADDR` | `:9091` |
-| `POSTGRES_MAX_CONNECTIONS` | pgx default |
-| `STORE_LOCK_TIMEOUT` | disabled |
-| `RECONCILE_INTERVAL` | `30s` |
-| `RECONCILE_OPERATION_TIMEOUT` | `10s` |
-| `HEALTH_CHECK_INTERVAL` | `5s` |
-| `SHUTDOWN_TIMEOUT` | `15s` |
-| `LOG_LEVEL` | `INFO` |
+| Environment variable | Default | Purpose |
+| --- | --- | --- |
+| `DATABASE_URL` | required | PostgreSQL connection string for a writable primary. |
+| `GRPC_LISTEN_ADDR` | `:9090` | TCP address for the planner and worker gRPC APIs, health service, and reflection. |
+| `POSTGRES_MAX_CONNECTIONS` | pgx default | Maximum number of connections in the PostgreSQL pool. |
+| `STORE_LOCK_TIMEOUT` | disabled | Maximum time a store transaction waits to acquire a PostgreSQL lock. |
+| `RECONCILE_INTERVAL` | `30s` | Interval between draining-chain reconciliation sweeps. |
+| `RECONCILE_OPERATION_TIMEOUT` | `10s` | Timeout for each draining-chain reconciliation operation. |
+| `HEALTH_CHECK_INTERVAL` | `5s` | Interval and per-check timeout for PostgreSQL readiness checks. |
+| `SHUTDOWN_TIMEOUT` | `15s` | Overall deadline for graceful service shutdown. |
+| `LOG_LEVEL` | `INFO` | Minimum severity emitted by the structured logger. |
 
 The initial service is plaintext and has no authentication.
 

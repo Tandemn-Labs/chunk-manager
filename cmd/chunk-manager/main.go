@@ -6,15 +6,12 @@ import (
 	"fmt"
 	"log/slog"
 	"net"
-	"net/http"
 	"os"
 	"os/signal"
 	"sync"
 	"syscall"
 	"time"
 
-	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"google.golang.org/grpc"
 	grpchealth "google.golang.org/grpc/health"
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
@@ -87,24 +84,14 @@ func run(cfg config, logger *slog.Logger) error {
 	if err != nil {
 		return fmt.Errorf("create PostgreSQL store: %w", err)
 	}
-	registry := prometheus.NewRegistry()
-	rpcMetrics, err := observability.NewRPCMetrics(registry)
-	if err != nil {
-		return fmt.Errorf("create gRPC metrics: %w", err)
-	}
-	reconcileMetrics, err := observability.NewReconcileMetrics(registry)
-	if err != nil {
-		return fmt.Errorf("create reconciliation metrics: %w", err)
-	}
 	runner, err := reconcile.NewRunner(store, logger, reconcile.Config{
 		Interval:         cfg.reconcileInterval,
 		OperationTimeout: cfg.reconcileOperationLimit,
-		Observer:         reconcileMetrics.Observe,
 	})
 	if err != nil {
 		return fmt.Errorf("create reconciliation runner: %w", err)
 	}
-	grpcServer := grpc.NewServer(grpc.UnaryInterceptor(rpcMetrics.UnaryServerInterceptor(logger)))
+	grpcServer := grpc.NewServer(grpc.UnaryInterceptor(observability.UnaryServerInterceptor(logger)))
 	chunkmanagerv1.RegisterPlannerServiceServer(grpcServer, api.NewPlannerServer(store))
 	chunkmanagerv1.RegisterWorkerServiceServer(grpcServer, api.NewWorkerServer(store))
 
@@ -119,23 +106,10 @@ func run(cfg config, logger *slog.Logger) error {
 	if err != nil {
 		return fmt.Errorf("listen for gRPC on %q: %w", cfg.grpcListenAddr, err)
 	}
-	adminListener, err := net.Listen("tcp", cfg.adminListenAddr)
-	if err != nil {
-		_ = grpcListener.Close()
-		return fmt.Errorf("listen for admin HTTP on %q: %w", cfg.adminListenAddr, err)
-	}
-
-	adminMux := http.NewServeMux()
-	adminMux.Handle("GET /metrics", promhttp.HandlerFor(registry, promhttp.HandlerOpts{}))
-	adminServer := &http.Server{
-		Addr:              cfg.adminListenAddr,
-		Handler:           adminMux,
-		ReadHeaderTimeout: 5 * time.Second,
-	}
 
 	backgroundContext, cancelBackground := context.WithCancel(context.Background())
 	defer cancelBackground()
-	componentErrors := make(chan error, 3)
+	componentErrors := make(chan error, 2)
 	var workers sync.WaitGroup
 
 	workers.Add(1)
@@ -143,14 +117,6 @@ func run(cfg config, logger *slog.Logger) error {
 		defer workers.Done()
 		if err := grpcServer.Serve(grpcListener); err != nil && !errors.Is(err, grpc.ErrServerStopped) {
 			componentErrors <- fmt.Errorf("serve gRPC: %w", err)
-		}
-	}()
-
-	workers.Add(1)
-	go func() {
-		defer workers.Done()
-		if err := adminServer.Serve(adminListener); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			componentErrors <- fmt.Errorf("serve admin HTTP: %w", err)
 		}
 	}()
 
@@ -176,11 +142,7 @@ func run(cfg config, logger *slog.Logger) error {
 		)
 	}()
 
-	logger.Info(
-		"chunk manager started",
-		slog.String("grpc_listen_addr", cfg.grpcListenAddr),
-		slog.String("admin_listen_addr", cfg.adminListenAddr),
-	)
+	logger.Info("chunk manager started", slog.String("grpc_listen_addr", cfg.grpcListenAddr))
 
 	var runtimeError error
 	select {
@@ -196,7 +158,7 @@ func run(cfg config, logger *slog.Logger) error {
 
 	shutdownContext, cancelShutdown := context.WithTimeout(context.Background(), cfg.shutdownTimeout)
 	defer cancelShutdown()
-	if !stopServers(shutdownContext, grpcServer, adminServer, logger) {
+	if !stopGRPCServer(shutdownContext, grpcServer, logger) {
 		closePool = false
 	}
 
@@ -289,10 +251,9 @@ func monitorReadiness(
 	}
 }
 
-func stopServers(
+func stopGRPCServer(
 	ctx context.Context,
 	grpcServer *grpc.Server,
-	adminServer *http.Server,
 	logger *slog.Logger,
 ) bool {
 	grpcDone := make(chan struct{})
@@ -301,32 +262,12 @@ func stopServers(
 		close(grpcDone)
 	}()
 
-	adminDone := make(chan error, 1)
-	go func() {
-		adminDone <- adminServer.Shutdown(ctx)
-	}()
-
-	for grpcDone != nil || adminDone != nil {
-		select {
-		case <-grpcDone:
-			grpcDone = nil
-		case err := <-adminDone:
-			adminDone = nil
-			if err != nil && !errors.Is(err, http.ErrServerClosed) {
-				logger.Error("admin HTTP shutdown failed", slog.Any("error", err))
-			}
-		case <-ctx.Done():
-			logger.Warn("graceful shutdown timed out; forcing servers to stop")
-			if grpcDone != nil {
-				grpcServer.Stop()
-			}
-			if adminDone != nil {
-				if err := adminServer.Close(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-					logger.Error("force close admin HTTP server", slog.Any("error", err))
-				}
-			}
-			return false
-		}
+	select {
+	case <-grpcDone:
+		return true
+	case <-ctx.Done():
+		logger.Warn("graceful shutdown timed out; forcing gRPC server to stop")
+		grpcServer.Stop()
+		return false
 	}
-	return true
 }

@@ -21,9 +21,6 @@ func TestLoadConfigDefaults(t *testing.T) {
 	if cfg.grpcListenAddr != ":9090" {
 		t.Errorf("gRPC listen address = %q", cfg.grpcListenAddr)
 	}
-	if cfg.adminListenAddr != ":9091" {
-		t.Errorf("admin listen address = %q", cfg.adminListenAddr)
-	}
 	if cfg.reconcileInterval != 30*time.Second {
 		t.Errorf("reconcile interval = %s", cfg.reconcileInterval)
 	}
@@ -51,7 +48,6 @@ func TestLoadConfigOverrides(t *testing.T) {
 	cfg, err := loadConfig(mapEnvironment(map[string]string{
 		"DATABASE_URL":                "postgres://database/other",
 		"GRPC_LISTEN_ADDR":            "127.0.0.1:19090",
-		"ADMIN_LISTEN_ADDR":           "127.0.0.1:19091",
 		"RECONCILE_INTERVAL":          "2m",
 		"RECONCILE_OPERATION_TIMEOUT": "3s",
 		"POSTGRES_MAX_CONNECTIONS":    "23",
@@ -66,9 +62,6 @@ func TestLoadConfigOverrides(t *testing.T) {
 
 	if cfg.grpcListenAddr != "127.0.0.1:19090" {
 		t.Errorf("gRPC listen address = %q", cfg.grpcListenAddr)
-	}
-	if cfg.adminListenAddr != "127.0.0.1:19091" {
-		t.Errorf("admin listen address = %q", cfg.adminListenAddr)
 	}
 	if cfg.reconcileInterval != 2*time.Minute {
 		t.Errorf("reconcile interval = %s", cfg.reconcileInterval)

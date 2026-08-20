@@ -194,16 +194,11 @@ func TestCompleteChunkMapsRequestAndResponse(t *testing.T) {
 func TestFailChunkMapsRequestAndResponse(t *testing.T) {
 	jobID := ulid.MustParse(testJobID)
 	rankID := ulid.MustParse(testRankID)
-	notBefore := time.Date(2026, time.August, 19, 10, 4, 0, 0, time.UTC)
 	var gotParams postgres.FailChunkParams
 	store := &fakeStore{
 		failChunkFn: func(_ context.Context, params postgres.FailChunkParams) (postgres.FailChunkResult, error) {
 			gotParams = params
-			return postgres.FailChunkResult{
-				JobState:  postgres.JobStateRunning,
-				Retried:   true,
-				NotBefore: &notBefore,
-			}, nil
+			return postgres.FailChunkResult{JobState: postgres.JobStateRunning}, nil
 		},
 	}
 
@@ -230,11 +225,7 @@ func TestFailChunkMapsRequestAndResponse(t *testing.T) {
 	if !reflect.DeepEqual(gotParams, wantParams) {
 		t.Errorf("FailChunk params = %+v, want %+v", gotParams, wantParams)
 	}
-	wantResponse := &chunkmanagerv1.FailChunkResponse{
-		JobState:  chunkmanagerv1.JobState_JOB_STATE_RUNNING,
-		Retried:   true,
-		NotBefore: timestamppb.New(notBefore),
-	}
+	wantResponse := &chunkmanagerv1.FailChunkResponse{JobState: chunkmanagerv1.JobState_JOB_STATE_RUNNING}
 	if !proto.Equal(response, wantResponse) {
 		t.Errorf("FailChunk response = %v, want %v", response, wantResponse)
 	}

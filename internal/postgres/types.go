@@ -157,9 +157,7 @@ type FailChunkParams struct {
 }
 
 type FailChunkResult struct {
-	JobState  JobState
-	Retried   bool
-	NotBefore *time.Time
+	JobState JobState
 }
 
 type ReconcileDrainingResult struct {

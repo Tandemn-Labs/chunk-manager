@@ -9,13 +9,12 @@ pgxpool - Connection pool, built on pgx \
 sqlc - Generates type-safe idiomatic Go code from SQL \
 goose - Migration system \
 gRPC + Protocol Buffers - Planner and worker service API \
-Buf - Protobuf linting and Go generation \
-Prometheus - Service metrics
+Buf - Protobuf linting and Go generation
 
 ## Service process
 
 - `cmd/chunk-manager` assembles the PostgreSQL pool, Store, gRPC services,
-  health service, metrics listener, and draining-chain reconciler.
+  health service, and draining-chain reconciler.
 - `proto/tandemn/chunkmanager/v1` is the versioned wire contract.
 - `internal/api` translates protobuf messages and gRPC status codes to the
   transport-neutral Store API.
@@ -81,4 +80,3 @@ Common store infrastructure. Defines a key `Store` struct that contains the `pgx
 
 #### reconciliation.go
 - `ReconcileDrainingAssociation` sees all chunks associated with a specific draining chain, checks for expiry and requeues the chunks.
-

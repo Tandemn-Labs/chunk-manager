@@ -165,9 +165,5 @@ func (server *WorkerServer) FailChunk(
 	if err != nil {
 		return nil, rpcError(err)
 	}
-	return &chunkmanagerv1.FailChunkResponse{
-		JobState:  state,
-		Retried:   result.Retried,
-		NotBefore: optionalTimestamp(result.NotBefore),
-	}, nil
+	return &chunkmanagerv1.FailChunkResponse{JobState: state}, nil
 }

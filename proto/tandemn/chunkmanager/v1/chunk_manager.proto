@@ -173,6 +173,7 @@ message RenewLeasesRequest {
 
 message RenewLeasesResponse {
   repeated RenewedLease renewed = 1;
+  // In case a lease expired, cannot be renewed
   repeated LeaseReference stale = 2;
   google.protobuf.Timestamp database_time = 3;
 }
@@ -195,11 +196,11 @@ message FailChunkRequest {
   LeaseReference lease = 2;
   string failure_class = 3;
   string message = 4;
+
+  // Caller can specify whether chunk is retriable
   bool retriable = 5;
 }
 
 message FailChunkResponse {
   JobState job_state = 1;
-  bool retried = 2;
-  google.protobuf.Timestamp not_before = 3;
 }
