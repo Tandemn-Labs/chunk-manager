@@ -23,6 +23,14 @@ func (store *Store) AddChainAssociation(
 		if err != nil {
 			return ChainAssociation{}, fmt.Errorf("lock job: %w", err)
 		}
+		key := chainKey{rankID: identity.RankID, chainID: identity.ChainID}
+		associations, err := lockChainAssociations(ctx, queries, jobID, []chainKey{key})
+		if err != nil {
+			return ChainAssociation{}, err
+		}
+		if association, exists := associations[key]; exists {
+			return chainFromDB(association), nil
+		}
 		if job.State != db.JobStatePENDING && job.State != db.JobStateRUNNING {
 			return ChainAssociation{}, fmt.Errorf(
 				"%w: chain cannot be associated with a terminal job",
@@ -62,10 +70,6 @@ func (store *Store) DrainChainAssociation(
 		if err != nil {
 			return ChainAssociation{}, fmt.Errorf("lock job: %w", err)
 		}
-		if job.State != db.JobStateRUNNING {
-			return ChainAssociation{}, fmt.Errorf("%w: only a running job can drain a chain", ErrInvalidState)
-		}
-
 		key := chainKey{rankID: identity.RankID, chainID: identity.ChainID}
 		associations, err := lockChainAssociations(ctx, queries, jobID, []chainKey{key})
 		if err != nil {
@@ -77,6 +81,9 @@ func (store *Store) DrainChainAssociation(
 		}
 		if association.State == db.ChainStateDRAINING {
 			return chainFromDB(association), nil
+		}
+		if job.State != db.JobStateRUNNING {
+			return ChainAssociation{}, fmt.Errorf("%w: only a running job can drain a chain", ErrInvalidState)
 		}
 
 		now, err := databaseTime(ctx, queries)

@@ -114,6 +114,7 @@ Required fields:
 - State and timestamps
 - Total, succeeded, and failed chunk counts
 - Maximum retries and fixed retry backoff
+- Lease duration
 
 ### Chain association
 
@@ -193,6 +194,32 @@ cleared. Its lease generation is retained.
 
 ## 6. API Semantics
 
+### Planner operations
+
+The planner creates a job in `PENDING`, registers chunks in bounded batches,
+adds chain associations, and finalizes registration to transition the job to
+`RUNNING`. It may query aggregate job state and cancel a `PENDING` or `RUNNING`
+job. It may add chains while a job is `PENDING` or `RUNNING` and drain chains
+while the job is `RUNNING`.
+
+```text
+CreateJob(job_id, total_chunk_count, max_retries, retry_backoff, lease_duration)
+RegisterChunks(job_id, chunks: [{chunk_id, input_ref}, ...])
+FinalizeJobRegistration(job_id)
+GetJob(job_id)
+CancelJob(job_id)
+AddChainAssociation(job_id, rank_id, chain_id)
+DrainChainAssociation(job_id, rank_id, chain_id)
+```
+
+The planner supplies job and rank ULIDs. Exact replays of job creation, chunk
+registration, registration finalization, and cancellation return the current
+result. Chain addition and draining are replayable while the association still
+exists; after draining cleanup, placement must suppress delayed additions and
+must not reuse that chain identity. Reusing an ID with different immutable
+settings or input references is a conflict. Registering new chunks after
+finalization is rejected.
+
 ### Claim chunks
 
 ```text
@@ -201,6 +228,12 @@ ClaimChunks(job_id, rank_id, chain_id, max_chunks)
 
 One request may claim up to `max_chunks`. Chains must not request more chunks
 than they can execute concurrently.
+
+The response includes the current job state and the database-time sample used
+for lease decisions. `RUNNING` with no leases means no work is currently
+eligible and the chain may poll again with jitter. `SUCCEEDED`, `FAILED`, or
+`CANCELLED` with no leases is a normal terminal response and the chain stops
+polling. Claiming while the job is `PENDING` is rejected.
 
 A chunk is claimable when:
 
@@ -283,7 +316,8 @@ FailChunk(
   chunk_id,
   lease_generation,
   failure_class,
-  message
+  message,
+  retriable
 )
 ```
 
@@ -374,3 +408,21 @@ uploaded by a stale generation remains unreferenced and may be garbage-collected
 | Database is unavailable | Coordination stops until PostgreSQL returns. |
 | Output upload succeeds but completion fails | The unreferenced output may be garbage-collected. |
 | Job is cancelled | No state-changing lease operation is accepted; replay of an already committed identical completion may return its existing success. |
+
+## 11. gRPC Transport
+
+The wire API uses protobuf package `tandemn.chunkmanager.v1` with separate
+`PlannerService` and `WorkerService` services. Job and rank IDs are canonical
+26-character ULID strings. Absolute times use `google.protobuf.Timestamp`, and
+durations use `google.protobuf.Duration` restricted to whole milliseconds.
+
+Domain failures use stable gRPC status codes. Invalid input is
+`INVALID_ARGUMENT`; missing records are `NOT_FOUND`; immutable conflicts are
+`ALREADY_EXISTS`; invalid states and stale or expired leases are
+`FAILED_PRECONDITION`; retryable transaction aborts are `ABORTED`; and database
+unavailability is `UNAVAILABLE`. Responses include `google.rpc.ErrorInfo` so
+clients do not need to parse error messages.
+
+Transparent retries must not be enabled for `ClaimChunks`. Repeating renewal is
+safe, identical completion replay is supported, and a worker receiving a stale
+result after retrying `FailChunk` discards that lease.

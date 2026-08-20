@@ -88,6 +88,12 @@ type ClaimChunksParams struct {
 	MaxChunks int32
 }
 
+type ClaimChunksResult struct {
+	JobState     JobState
+	Leases       []Lease
+	DatabaseTime time.Time
+}
+
 type Lease struct {
 	JobID      ulid.ULID
 	ChunkID    int64
@@ -118,8 +124,9 @@ type RenewedLease struct {
 }
 
 type RenewLeasesResult struct {
-	Renewed []RenewedLease
-	Stale   []LeaseReference
+	Renewed      []RenewedLease
+	Stale        []LeaseReference
+	DatabaseTime time.Time
 }
 
 type CompleteChunkParams struct {

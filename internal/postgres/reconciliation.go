@@ -33,7 +33,7 @@ func (store *Store) ReconcileDrainingAssociation(
 		}
 		association, exists := associations[key]
 		if !exists {
-			return ReconcileDrainingResult{AssociationDeleted: true}, nil
+			return ReconcileDrainingResult{}, nil
 		}
 		if association.State != db.ChainStateDRAINING {
 			return ReconcileDrainingResult{}, fmt.Errorf(

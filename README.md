@@ -4,11 +4,13 @@ Chunk Manager coordinates chunks of a batched inference job across workers in
 multiple Kubernetes clusters. It manages coordination metadata only; workers
 read inputs and write outputs directly to object storage.
 
-The service is currently under development.
+The service exposes separate gRPC APIs for planners and workers. PostgreSQL is
+the source of truth and service processes are stateless.
 
 ## Design documents
 
 - [Chunk coordination protocol](docs/chunk-coordination-protocol.md)
+- [Python lifecycle example](examples/python/README.md)
 
 ## PostgreSQL
 
@@ -41,3 +43,56 @@ a draining association is deleted.
 Lossy database restore is not safe for resumable jobs because it can roll lease
 generations backward. Until the protocol includes a recovery epoch, all workers
 must be fenced and nonterminal jobs recreated after such a restore.
+
+## Protobuf
+
+The versioned API is in `proto/tandemn/chunkmanager/v1`. Generated Go code is
+committed under `gen/go`. Lint and regenerate it with the pinned Buf command:
+
+```sh
+go run github.com/bufbuild/buf/cmd/buf@v1.60.0 lint
+go run github.com/bufbuild/buf/cmd/buf@v1.60.0 generate
+```
+
+## Running the service
+
+Apply migrations, then start the gRPC server:
+
+```sh
+export DATABASE_URL='postgresql:///chunkManagement?host=/run/postgresql'
+go run ./cmd/dbmigrate up
+go run ./cmd/chunk-manager
+```
+
+The gRPC listener defaults to `:9090`. The admin listener defaults to `:9091`
+and exposes Prometheus metrics at `/metrics`. The standard gRPC health service
+publishes `liveness` and `readiness` service names. Reflection is enabled for
+development and troubleshooting.
+
+| Environment variable | Default |
+| --- | --- |
+| `GRPC_LISTEN_ADDR` | `:9090` |
+| `ADMIN_LISTEN_ADDR` | `:9091` |
+| `POSTGRES_MAX_CONNECTIONS` | pgx default |
+| `STORE_LOCK_TIMEOUT` | disabled |
+| `RECONCILE_INTERVAL` | `30s` |
+| `RECONCILE_OPERATION_TIMEOUT` | `10s` |
+| `HEALTH_CHECK_INTERVAL` | `5s` |
+| `SHUTDOWN_TIMEOUT` | `15s` |
+| `LOG_LEVEL` | `INFO` |
+
+The initial service is plaintext and has no authentication.
+
+## Testing
+
+Integration tests use an existing local PostgreSQL server. Create the dedicated
+database once, then run the suite:
+
+```sh
+createdb chunk_manager_test
+go test ./...
+```
+
+Set `TEST_DATABASE_URL` to use another local database. The integration harness
+refuses remote hosts and database names that do not end in `_test`; it creates
+and drops an isolated schema for each test process.

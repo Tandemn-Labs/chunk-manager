@@ -78,6 +78,7 @@ INSERT INTO jobs (
     $6,
     $6
 )
+ON CONFLICT (job_id) DO NOTHING
 RETURNING job_id, state, total_chunk_count, succeeded_chunk_count, failed_chunk_count, max_retries, retry_backoff_ms, lease_duration_ms, created_at, registration_completed_at, updated_at, terminal_at
 `
 

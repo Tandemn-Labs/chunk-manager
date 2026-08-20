@@ -16,6 +16,7 @@ INSERT INTO jobs (
     sqlc.arg(db_time),
     sqlc.arg(db_time)
 )
+ON CONFLICT (job_id) DO NOTHING
 RETURNING *;
 
 -- name: GetJob :one

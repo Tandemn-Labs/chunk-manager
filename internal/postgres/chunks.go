@@ -12,30 +12,42 @@ import (
 	"github.com/tandemn-labs/chunk-manager/internal/postgres/db"
 )
 
-func (store *Store) ClaimChunks(ctx context.Context, params ClaimChunksParams) ([]Lease, error) {
+func (store *Store) ClaimChunks(ctx context.Context, params ClaimChunksParams) (ClaimChunksResult, error) {
 	if params.ChainID < 0 {
-		return nil, fmt.Errorf("%w: chain ID cannot be negative", ErrInvalidArgument)
+		return ClaimChunksResult{}, fmt.Errorf("%w: chain ID cannot be negative", ErrInvalidArgument)
 	}
 	if params.MaxChunks <= 0 || params.MaxChunks > store.maxClaimChunks {
-		return nil, fmt.Errorf(
+		return ClaimChunksResult{}, fmt.Errorf(
 			"%w: max chunks must be between 1 and %d",
 			ErrInvalidArgument,
 			store.maxClaimChunks,
 		)
 	}
 
-	leases, err := withTransaction(ctx, store, func(queries *db.Queries) ([]Lease, error) {
+	result, err := withTransaction(ctx, store, func(queries *db.Queries) (ClaimChunksResult, error) {
 		job, err := queries.LockJob(ctx, dbUUID(params.JobID))
 		if err != nil {
-			return nil, fmt.Errorf("lock job: %w", err)
+			return ClaimChunksResult{}, fmt.Errorf("lock job: %w", err)
+		}
+		if job.State == db.JobStateSUCCEEDED || job.State == db.JobStateFAILED ||
+			job.State == db.JobStateCANCELLED {
+			now, err := databaseTime(ctx, queries)
+			if err != nil {
+				return ClaimChunksResult{}, err
+			}
+			return ClaimChunksResult{
+				JobState:     JobState(job.State),
+				Leases:       []Lease{},
+				DatabaseTime: now,
+			}, nil
 		}
 		if job.State != db.JobStateRUNNING {
-			return nil, fmt.Errorf("%w: job is not running", ErrInvalidState)
+			return ClaimChunksResult{}, fmt.Errorf("%w: job is not running", ErrInvalidState)
 		}
 
 		discoveryTime, err := databaseTime(ctx, queries)
 		if err != nil {
-			return nil, err
+			return ClaimChunksResult{}, err
 		}
 		candidates, err := queries.FindClaimCandidates(ctx, db.FindClaimCandidatesParams{
 			JobID:          dbUUID(params.JobID),
@@ -43,7 +55,7 @@ func (store *Store) ClaimChunks(ctx context.Context, params ClaimChunksParams) (
 			CandidateLimit: params.MaxChunks,
 		})
 		if err != nil {
-			return nil, fmt.Errorf("find claim candidates: %w", err)
+			return ClaimChunksResult{}, fmt.Errorf("find claim candidates: %w", err)
 		}
 
 		targetKey := chainKey{rankID: params.RankID, chainID: params.ChainID}
@@ -70,14 +82,14 @@ func (store *Store) ClaimChunks(ctx context.Context, params ClaimChunksParams) (
 			associationKeys,
 		)
 		if err != nil {
-			return nil, err
+			return ClaimChunksResult{}, err
 		}
 		targetAssociation, exists := associations[targetKey]
 		if !exists {
-			return nil, fmt.Errorf("%w: claiming chain association", ErrNotFound)
+			return ClaimChunksResult{}, fmt.Errorf("%w: claiming chain association", ErrNotFound)
 		}
 		if targetAssociation.State != db.ChainStateACTIVE {
-			return nil, ErrChainNotActive
+			return ClaimChunksResult{}, ErrChainNotActive
 		}
 
 		// This section onwards actually locks and work on chunks
@@ -86,7 +98,7 @@ func (store *Store) ClaimChunks(ctx context.Context, params ClaimChunksParams) (
 			ChunkIds: chunkIDs,
 		})
 		if err != nil {
-			return nil, fmt.Errorf("lock claim candidates: %w", err)
+			return ClaimChunksResult{}, fmt.Errorf("lock claim candidates: %w", err)
 		}
 		chunksByID := make(map[int64]db.Chunk, len(lockedChunks))
 		for _, chunk := range lockedChunks {
@@ -95,13 +107,13 @@ func (store *Store) ClaimChunks(ctx context.Context, params ClaimChunksParams) (
 
 		now, err := databaseTime(ctx, queries)
 		if err != nil {
-			return nil, err
+			return ClaimChunksResult{}, err
 		}
 		expiresAt := now.Add(time.Duration(job.LeaseDurationMs) * time.Millisecond)
-		result := make([]Lease, 0, params.MaxChunks)
+		leases := make([]Lease, 0, params.MaxChunks)
 
 		for _, candidate := range candidates {
-			if len(result) == int(params.MaxChunks) {
+			if len(leases) == int(params.MaxChunks) {
 				break
 			}
 			chunk, exists := chunksByID[candidate.ChunkID]
@@ -122,11 +134,11 @@ func (store *Store) ClaimChunks(ctx context.Context, params ClaimChunksParams) (
 				}
 				sourceKey, ok := chainKeyFromChunk(chunk)
 				if !ok {
-					return nil, fmt.Errorf("%w: leased chunk has no owner", ErrInvalidState)
+					return ClaimChunksResult{}, fmt.Errorf("%w: leased chunk has no owner", ErrInvalidState)
 				}
 				sourceAssociation, exists := associations[sourceKey]
 				if !exists {
-					return nil, fmt.Errorf("%w: current chain association", ErrNotFound)
+					return ClaimChunksResult{}, fmt.Errorf("%w: current chain association", ErrNotFound)
 				}
 				if sourceAssociation.State == db.ChainStateACTIVE {
 					retryCount++
@@ -143,14 +155,14 @@ func (store *Store) ClaimChunks(ctx context.Context, params ClaimChunksParams) (
 							ChunkID:        chunk.ChunkID,
 						})
 						if err != nil {
-							return nil, fmt.Errorf("fail exhausted chunk: %w", err)
+							return ClaimChunksResult{}, fmt.Errorf("fail exhausted chunk: %w", err)
 						}
 						job, err = queries.RecordJobChunkFailed(ctx, db.RecordJobChunkFailedParams{
 							DbTime: dbTimestamp(now),
 							JobID:  dbUUID(params.JobID),
 						})
 						if err != nil {
-							return nil, fmt.Errorf("record exhausted chunk: %w", err)
+							return ClaimChunksResult{}, fmt.Errorf("record exhausted chunk: %w", err)
 						}
 						continue
 					}
@@ -158,7 +170,7 @@ func (store *Store) ClaimChunks(ctx context.Context, params ClaimChunksParams) (
 			case db.ChunkStateSUCCEEDED, db.ChunkStateFAILED, db.ChunkStateCANCELLED:
 				continue
 			default:
-				return nil, fmt.Errorf("%w: unknown chunk state %q", ErrInvalidState, chunk.State)
+				return ClaimChunksResult{}, fmt.Errorf("%w: unknown chunk state %q", ErrInvalidState, chunk.State)
 			}
 
 			chainID := params.ChainID
@@ -173,18 +185,22 @@ func (store *Store) ClaimChunks(ctx context.Context, params ClaimChunksParams) (
 				ChunkID:          chunk.ChunkID,
 			})
 			if err != nil {
-				return nil, fmt.Errorf("assign chunk %d: %w", chunk.ChunkID, err)
+				return ClaimChunksResult{}, fmt.Errorf("assign chunk %d: %w", chunk.ChunkID, err)
 			}
 			lease, err := leaseFromChunk(assigned)
 			if err != nil {
-				return nil, err
+				return ClaimChunksResult{}, err
 			}
-			result = append(result, lease)
+			leases = append(leases, lease)
 		}
 
-		return result, nil
+		return ClaimChunksResult{
+			JobState:     JobState(job.State),
+			Leases:       leases,
+			DatabaseTime: now,
+		}, nil
 	})
-	return leases, normalizeDatabaseError(err)
+	return result, normalizeDatabaseError(err)
 }
 
 func (store *Store) RenewLeases(
@@ -285,8 +301,9 @@ func (store *Store) RenewLeases(
 			renewedByChunk[row.ChunkID] = row
 		}
 		response := RenewLeasesResult{
-			Renewed: make([]RenewedLease, 0, len(renewedRows)),
-			Stale:   make([]LeaseReference, 0, len(params.Leases)-len(renewedRows)),
+			Renewed:      make([]RenewedLease, 0, len(renewedRows)),
+			Stale:        make([]LeaseReference, 0, len(params.Leases)-len(renewedRows)),
+			DatabaseTime: now,
 		}
 		for _, requested := range params.Leases {
 			row, renewed := renewedByChunk[requested.ChunkID]

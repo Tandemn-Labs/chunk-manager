@@ -11,4 +11,6 @@ var (
 	ErrChainNotActive         = errors.New("chain is not active")
 	ErrStaleLease             = errors.New("stale lease")
 	ErrLeaseExpired           = errors.New("lease expired")
+	ErrAborted                = errors.New("transaction aborted")
+	ErrUnavailable            = errors.New("PostgreSQL unavailable")
 )

@@ -5,6 +5,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
+	"net"
 	"sort"
 	"strconv"
 	"time"
@@ -264,7 +266,24 @@ func normalizeDatabaseError(err error) error {
 			return fmt.Errorf("%w (%s): %w", ErrConflict, postgresError.ConstraintName, err)
 		case "22023", "23502", "23514":
 			return fmt.Errorf("%w (%s): %w", ErrInvalidArgument, postgresError.ConstraintName, err)
+		case "40001", "40P01", "55P03":
+			return fmt.Errorf("%w: %w", ErrAborted, err)
+		case "25006", "57P01", "57P02", "57P03":
+			return fmt.Errorf("%w: %w", ErrUnavailable, err)
 		}
+		if len(postgresError.Code) >= 2 && postgresError.Code[:2] == "08" {
+			return fmt.Errorf("%w: %w", ErrUnavailable, err)
+		}
+	}
+
+	var connectError *pgconn.ConnectError
+	if errors.As(err, &connectError) || errors.Is(err, pgconn.ErrConnClosed) {
+		return fmt.Errorf("%w: %w", ErrUnavailable, err)
+	}
+	var networkError net.Error
+	if errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) ||
+		errors.As(err, &networkError) || pgconn.SafeToRetry(err) {
+		return fmt.Errorf("%w: %w", ErrUnavailable, err)
 	}
 	return err
 }
