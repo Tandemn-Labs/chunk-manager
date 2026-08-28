@@ -4,16 +4,17 @@ Run these commands from the repository root. Create a virtual environment and
 generate the Python protobuf modules outside the repository:
 
 ```sh
-python3 -m venv /tmp/chunk-manager-python-venv
-source /tmp/chunk-manager-python-venv/bin/activate
+# Create your own venv
 python -m pip install -r examples/python/requirements.txt
 
-STUB_DIR="$(mktemp -d)"
+# Generate gRPC bindings
+STUB_DIR="."
 python -m grpc_tools.protoc \
-  -I proto \
+  -I ../../proto \
   --python_out="$STUB_DIR" \
   --grpc_python_out="$STUB_DIR" \
-  proto/tandemn/chunkmanager/v1/chunk_manager.proto
+  --pyi_out="$STUB_DIR" \
+  tandemn/chunkmanager/v1/chunk_manager.proto
 export PYTHONPATH="$STUB_DIR"
 ```
 
