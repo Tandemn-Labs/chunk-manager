@@ -38,7 +38,7 @@ def main() -> None:
                 chunks=[
                     chunk_manager_pb2.ChunkRegistration(
                         chunk_id=chunk_id,
-                        input_ref=f"file:///data/{job_id}/input/{chunk_id}.jsonl",
+                        input_ref=f"s3://batched-chunks/{job_id}/input/{chunk_id}.jsonl",
                     )
                     for chunk_id in range(50)
                 ],

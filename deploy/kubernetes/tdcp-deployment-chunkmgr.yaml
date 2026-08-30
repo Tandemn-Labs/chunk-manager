@@ -6,6 +6,7 @@ metadata:
   namespace: default
   labels:
     app.kubernetes.io/name: chunk-manager
+
 spec:
   replicas: 1
   strategy:
@@ -22,6 +23,7 @@ spec:
       nodeSelector:
         kubernetes.io/arch: amd64 # Only built for x86_64
       terminationGracePeriodSeconds: 30
+
       containers:
         - name: chunk-manager
           image: 906171432343.dkr.ecr.us-east-1.amazonaws.com/chunk-manager:cb0f926d7f0f
@@ -36,10 +38,12 @@ spec:
               value: ":9090"
             - name: POSTGRES_MAX_CONNECTIONS
               value: "10"
+          
           ports:
             - name: grpc
               containerPort: 9090
               protocol: TCP
+          
           startupProbe:
             grpc:
               port: 9090
@@ -47,6 +51,7 @@ spec:
             periodSeconds: 2
             timeoutSeconds: 1
             failureThreshold: 30
+          
           livenessProbe:
             grpc:
               port: 9090
@@ -54,6 +59,7 @@ spec:
             periodSeconds: 10
             timeoutSeconds: 1
             failureThreshold: 3
+          
           readinessProbe:
             grpc:
               port: 9090
@@ -61,6 +67,7 @@ spec:
             periodSeconds: 5
             timeoutSeconds: 1
             failureThreshold: 1
+          
           resources:
             requests:
               cpu: 50m

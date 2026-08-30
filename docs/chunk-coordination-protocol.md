@@ -390,8 +390,14 @@ lease.
 Chains write immutable generation-specific outputs:
 
 ```text
-jobs/{job_id}/chunks/{chunk_id}/generations/{lease_generation}/output
+{some-prefix}/{job_id}/output/{chunk_id}/{lease_generation}.jsonl
 ```
+
+Input can also be found at:
+
+```text
+{some-prefix}/{job_id}/input/{chunk_id}.jsonl
+``` 
 
 Only output metadata committed by `CompleteChunk` is authoritative. An output
 uploaded by a stale generation remains unreferenced and may be garbage-collected.
