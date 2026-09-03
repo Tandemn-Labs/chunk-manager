@@ -9,12 +9,13 @@ from tandemn.chunkmanager.v1 import chunk_manager_pb2_grpc
 
 RPC_TIMEOUT_SECONDS = 5
 
+CHUNK_MANAGER_ADDR=""
 
 def main() -> None:
     job_id = str(ulid.from_int(1))
     print(f"Job id: {job_id}")
 
-    with grpc.insecure_channel("127.0.0.1:60002") as channel:
+    with grpc.insecure_channel(CHUNK_MANAGER_ADDR) as channel:
         planner = chunk_manager_pb2_grpc.PlannerServiceStub(channel)
         worker = chunk_manager_pb2_grpc.WorkerServiceStub(channel)
 
