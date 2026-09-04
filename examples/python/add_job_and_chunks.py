@@ -1,18 +1,52 @@
 import argparse
+from pathlib import Path
+from uuid import NAMESPACE_URL, uuid5
 
 import grpc
+import yaml
 from google.protobuf import duration_pb2
 from tandemn.chunkmanager.v1 import chunk_manager_pb2
 from tandemn.chunkmanager.v1 import chunk_manager_pb2_grpc
 
 
 RPC_TIMEOUT_SECONDS = 5
+_CROCKFORD_BASE32 = "0123456789ABCDEFGHJKMNPQRSTVWXYZ"
 
 # Use:
 # python add_job_and_chunks.py \
 # --target host:port \
 # <job-id-1>:50 \
 # <job-id-2>:10
+#
+# Or derive batch jobs and chunk counts from a Tandemn benchmark:
+# python add_job_and_chunks.py --target host:port --benchmark /path/to/benchmark
+
+
+def stable_store_id(benchmark_id: str, job_name: str) -> str:
+    raw = b"\x00" * 6 + uuid5(
+        NAMESPACE_URL, f"tandemn-sim:{benchmark_id}:{job_name}"
+    ).bytes[:10]
+    value = int.from_bytes(raw, "big")
+    return "".join(
+        _CROCKFORD_BASE32[(value >> shift) & 31] for shift in range(125, -1, -5)
+    )
+
+
+def load_benchmark_jobs(directory: Path) -> list[tuple[str, int]]:
+    benchmark = yaml.safe_load((directory / "benchmark.yaml").read_text())["benchmark"]
+    jobs = []
+    for path in sorted((directory / benchmark["jobs"]).glob("*.yaml")):
+        document = yaml.safe_load(path.read_text())
+        schedule = document["schedule"]
+        if schedule.get("enabled") is not True or schedule.get("kind") != "batch":
+            continue
+        shard_count = document["workload"]["dataset"]["partitioning"]["shard_count"]
+        if not isinstance(shard_count, int) or shard_count <= 0:
+            raise ValueError(f"{path} has invalid shard_count {shard_count!r}")
+        jobs.append((stable_store_id(benchmark["id"], document["job_id"]), shard_count))
+    if not jobs:
+        raise ValueError(f"no enabled batch jobs found in {directory}")
+    return jobs
 
 def parse_job_spec(value: str) -> tuple[str, int]:
     job_id, separator, chunk_count_text = value.rpartition(":")
@@ -80,16 +114,28 @@ def main() -> None:
     parser.add_argument(
         "job_specs",
         metavar="JOB_ID:CHUNK_COUNT",
-        nargs="+",
+        nargs="*",
         type=parse_job_spec,
-        help="one or more job ID and chunk count pairs",
+        help="job ID and chunk count pairs; omit when using --benchmark",
     )
     parser.add_argument("--target", required=True)
+    parser.add_argument(
+        "--benchmark",
+        type=Path,
+        help="benchmark directory used to derive enabled batch job IDs and shard counts",
+    )
     args = parser.parse_args()
+    if bool(args.benchmark) == bool(args.job_specs):
+        parser.error("provide either --benchmark or one or more JOB_ID:CHUNK_COUNT values")
+
+    try:
+        job_specs = load_benchmark_jobs(args.benchmark) if args.benchmark else args.job_specs
+    except (KeyError, OSError, TypeError, ValueError, yaml.YAMLError) as error:
+        parser.error(f"cannot load benchmark: {error}")
 
     with grpc.insecure_channel(args.target) as channel:
         planner = chunk_manager_pb2_grpc.PlannerServiceStub(channel)
-        for job_id, chunk_count in args.job_specs:
+        for job_id, chunk_count in job_specs:
             register_job(planner, job_id, chunk_count)
 
 
